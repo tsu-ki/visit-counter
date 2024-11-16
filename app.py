@@ -83,7 +83,6 @@ GRID_COLOR = '#e0e0e0'
 TEXT_COLOR = '#2d3436'
 THRESHOLD_COLOR = '#34495e'
 
-
 def init_db():
     conn = sqlite3.connect('visits.db')
     c = conn.cursor()
@@ -91,81 +90,114 @@ def init_db():
                  (ip TEXT, timestamp TEXT, repository TEXT)''')
     conn.commit()
     conn.close()
-
+    
 
 @app.route('/')
 def home():
     """Display documentation and usage instructions"""
     return render_template_string(HOME_PAGE)
+    
+
+def get_real_ip():
+    """
+    Get the real IP address of the client, even when behind proxies.
+    Checks multiple headers in order of reliability.
+    """
+    # Headers to check in order of preference
+    ip_headers = [
+        'X-Forwarded-For',
+        'X-Real-IP',
+        'CF-Connecting-IP',  # Cloudflare
+        'True-Client-IP',    # Akamai and others
+    ]
+    
+    for header in ip_headers:
+        if header in request.headers:
+            # X-Forwarded-For can contain multiple IPs - we want the first one
+            if header == 'X-Forwarded-For':
+                ips = request.headers.getlist(header)[0].split(',')
+                return ips[0].strip()
+            return request.headers[header].strip()
+    
+    # Fallback to remote_addr if no proxy headers found
+    return request.remote_addr
 
 
 def get_visit_stats(repository):
     conn = sqlite3.connect('visits.db')
-
-    # Dynamic date range calculation - always gets last 7 days including today
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=6)
-
+    
+    # Get today's date at midnight for consistent daily grouping
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date = (today - timedelta(days=6)).date()
+    
+    # Modified query to count visits per day correctly
     query = '''
+       WITH daily_visits AS (
+           SELECT 
+               date(timestamp) as visit_date,
+               ip,
+               repository
+           FROM visits
+           WHERE 
+               repository = ?
+               AND date(timestamp) >= ?
+           GROUP BY date(timestamp), ip, repository
+       )
        SELECT 
-           date(timestamp) as date,
-           COUNT(DISTINCT ip) as visitors
-       FROM visits
-       WHERE 
-           repository = ? AND
-           date(timestamp) >= date('now', '-6 days')
-       GROUP BY date(timestamp)
-       ORDER BY date ASC
-       '''
-
-    df = pd.read_sql_query(query, conn, params=(repository,))
+           visit_date as date,
+           COUNT(*) as visitors
+       FROM daily_visits
+       GROUP BY visit_date
+       ORDER BY visit_date ASC
+    '''
+    
+    df = pd.read_sql_query(query, conn, params=(repository, start_date))
+    
+    # Convert date strings to datetime objects
     df['date'] = pd.to_datetime(df['date'])
-
-    # Fill in missing dates with zero visits
-    date_range = pd.date_range(end=pd.Timestamp.now(), periods=7)
+    
+    # Create complete date range including today
+    date_range = pd.date_range(start=start_date, end=today, freq='D')
+    
+    # Reindex to fill missing dates with zero visits
     df = df.set_index('date').reindex(date_range, fill_value=0)
     df = df.reset_index()
     df.columns = ['date', 'visitors']
-
-    # Get all-time total unique visitors
+    
+    # Get total unique visitors (all-time)
     total_visitors = pd.read_sql_query('''
         SELECT COUNT(DISTINCT ip) as total
         FROM visits
         WHERE repository = ?
     ''', conn, params=(repository,)).iloc[0]['total']
-
+    
     conn.close()
     return df, total_visitors
-
-def get_real_ip():
-    if 'X-Forwarded-For' in request.headers:
-        # X-Forwarded-For format: client_ip, proxy1_ip, proxy2_ip
-        # We want the client_ip (first in the list)
-        return request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
-    return request.remote_addr
 
 
 @app.route('/badge/<repository>')
 def generate_badge(repository):
     # Record the visit
     visitor_ip = get_real_ip()
+    current_time = datetime.now().isoformat()
+    
     conn = sqlite3.connect('visits.db')
     c = conn.cursor()
     c.execute('INSERT INTO visits VALUES (?, ?, ?)',
-              (visitor_ip, datetime.now().isoformat(), repository))
+              (visitor_ip, current_time, repository))
     conn.commit()
     conn.close()
 
     # Get visit statistics
     df, total_visitors = get_visit_stats(repository)
 
-    # Create the visualization with smaller dimensions
+    # Create the visualization
     fig, ax = plt.subplots(figsize=(4, 2), facecolor=BACKGROUND_COLOR)
 
     # Plot thinner bars
     bars = ax.bar(df['date'], df['visitors'],
                   color=BRAND_RED, alpha=0.8,
-                  width=pd.Timedelta(days=0.5))  # Reduced width
+                  width=pd.Timedelta(days=0.5))
 
     # Set y-axis thresholds
     max_visits = max(df['visitors'].max(), 200)  # At least show up to 200
@@ -244,15 +276,12 @@ def generate_badge(repository):
 
     # Create response with headers
     response = Response(img_bytes.getvalue(), mimetype='image/svg+xml')
-
-    # Add CORS and cache control headers
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
 
     return response
-
 
 if __name__ == '__main__':
     init_db()
