@@ -137,11 +137,18 @@ def get_visit_stats(repository):
     conn.close()
     return df, total_visitors
 
+def get_real_ip():
+    if 'X-Forwarded-For' in request.headers:
+        # X-Forwarded-For format: client_ip, proxy1_ip, proxy2_ip
+        # We want the client_ip (first in the list)
+        return request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+    return request.remote_addr
+
 
 @app.route('/badge/<repository>')
 def generate_badge(repository):
     # Record the visit
-    visitor_ip = request.remote_addr
+    visitor_ip = get_real_ip()
     conn = sqlite3.connect('visits.db')
     c = conn.cursor()
     c.execute('INSERT INTO visits VALUES (?, ?, ?)',
