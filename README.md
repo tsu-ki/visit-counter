@@ -36,8 +36,8 @@ your-repo-name with your repository name
            * Start Command: gunicorn app:app
            * Environment Variable:
 
-           * Key: PYTHON_VERSION
-           *  Value: 3.9.0
+  * Key: PYTHON_VERSION
+  *  Value: 3.12.0
 
 
 # 3. Post-Deployment Steps
@@ -51,23 +51,23 @@ Verify the badge appears correctly in your repository's README.
 Local Development
 To run the service locally:
 # Clone the repository
-git clone https://github.com/yourusername/visitor-badge-service
-cd visitor-badge-service
+    git clone https://github.com/yourusername/visitor-badge-service
+    cd visitor-badge-service
 
-# Create virtual environment
-python -m venv venv
+    # Create virtual environment
+    python -m venv venv
 
-# Activate virtual environment
-# On Unix/macOS:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
+    # Activate virtual environment
+    # On Unix/macOS:
+    source venv/bin/activate
+    # On Windows:
+    venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+    # Install dependencies
+    pip install -r requirements.txt
 
-# Run the application
-python app.py
+    # Run the application
+    python app.py
 
 
 ## Technical Details
@@ -75,14 +75,14 @@ python app.py
 * Badge updates occur on each README view
 * Visitor counting mechanism:
 
-      * Based on unique IP addresses
-      * Data stored in SQLite database
+  * Based on unique IP addresses
+  * Data stored in SQLite database
 
 * Visualization features:
 
-      * Displays last 7 days of traffic
-      * Week boundaries marked with vertical lines
-      * Proper handling of month transitions
+  * Displays last 7 days of traffic
+  * Week boundaries marked with vertical lines
+  * Proper handling of month transitions
 
 
 
