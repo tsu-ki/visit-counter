@@ -257,7 +257,7 @@ def generate_badge(repository):
             ha='right')
 
     # Add website URL with smaller font
-    plt.figtext(0.98, 0.02, 'blt.owasp.org',
+    plt.figtext(0.98, 0.02, 'visit-counter(OWASP/BLT-inspired)',
                 ha='right',
                 color=TEXT_COLOR,
                 fontsize=6,
